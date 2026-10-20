@@ -238,7 +238,34 @@ fun SettingsScreen(vm: AppViewModel) {
         OutlinedTextField(pkg, { pkg = it }, label = { Text("Package name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(cert, { cert = it }, label = { Text("Cert SHA-256") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         Button(onClick = { vm.pair(pkg, cert); pkg = ""; cert = "" }, enabled = pkg.isNotBlank() && cert.replace(":", "").length == 64) { Text("Pair") }
+        HorizontalDivider()
+        BackupSection(vm)
     }
+}
+
+@Composable
+fun BackupSection(vm: AppViewModel) {
+    val exported by vm.backupText.collectAsState()
+    var bundle by remember { mutableStateOf("") }
+    var result by remember { mutableStateOf<String?>(null) }
+    var confirm by remember { mutableStateOf(false) }
+    Text("Settings backup (UI preferences only)", fontWeight = FontWeight.Bold)
+    Text("Exports only look-and-feel preferences. Never credentials, numbers, accounts, pairings or fleet control.")
+    OutlinedButton(onClick = vm::exportConfig) { Text("Export settings") }
+    exported?.let { Text(it) }
+    OutlinedTextField(bundle, { bundle = it }, label = { Text("Paste a backup to import") }, modifier = Modifier.fillMaxWidth())
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { result = vm.previewImport(bundle) }, enabled = bundle.isNotBlank()) { Text("Preview (dry run)") }
+        Button(onClick = { confirm = true }, enabled = bundle.isNotBlank()) { Text("Import…") }
+    }
+    result?.let { Text(it) }
+    if (confirm) AlertDialog(
+        onDismissRequest = { confirm = false },
+        title = { Text("Import these settings?") },
+        text = { Text("Only UI preferences will change. Fleet external control will be turned OFF.") },
+        confirmButton = { Button(onClick = { confirm = false; result = vm.applyImportConfirmed(bundle) }) { Text("Import") } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
+    )
 }
 
 const val DISCLAIMER_TEXT = """VictorSpoof is a novelty app for harmless pranks between friends. It is for ENTERTAINMENT ONLY.

@@ -51,4 +51,19 @@ CI (`.github/workflows/ci.yml`) runs the same steps and uploads `victorspoof-deb
 
 ## Fleet bridge
 
-Bound Messenger service `com.victorious.spoof.action.BRIDGE` (protocol 1.1, frozen envelope v1). Callers are authenticated by package + signing cert from `Message.sendingUid`. External control is off by default. No remote op can place a call. See the manual, section 10.
+Bound Messenger service `com.victorious.spoof.action.BRIDGE` (protocol 1.1, frozen envelope v1). Callers are authenticated by package + signing cert from `Message.sendingUid`. External control is off by default. No remote op can place a call. See the manual, sections 10–11.
+
+| Op | Kind | remoteAllowed | requiresConfirm |
+|---|---|---|---|
+| node.status.get | read | true | false |
+| spoof.status.get | read | true | false |
+| spoof.pool.list | read | true | false |
+| spoof.usage.get | read | true | false |
+| spoof.ui.open | action | true | false |
+| spoof.call.start | action | false | true |
+| spoof.call.end | action | false | true |
+| spoof.recording.delete | destructive | false | true |
+| config.export | action | false | false |
+| config.import | action | false | true |
+
+The receiver classifies every op itself, so envelope hints (`destructive`, `trigger.*`) never change these flags. `config.export` exports only allowlisted UI prefs and runs a refusal scan for Twilio credentials, `authToken`, `numberPool`, phone numbers, account ids and tokens. `config.import` supports `dryRun` (diff only, no writes), needs on-device confirmation, and always forces external control OFF.

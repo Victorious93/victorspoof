@@ -25,6 +25,9 @@ object OpRegistry {
         OpDescriptor("spoof.call.start", OpKind.action, remoteAllowed = false, requiresConfirm = true),
         OpDescriptor("spoof.call.end", OpKind.action, remoteAllowed = false, requiresConfirm = true),
         OpDescriptor("spoof.recording.delete", OpKind.destructive, remoteAllowed = false, requiresConfirm = true),
+        // Fleet UNIFIED_BACKUP ops (droidcommand-AI docs/specs/UNIFIED_BACKUP.md). Local Settings only.
+        OpDescriptor("config.export", OpKind.action, remoteAllowed = false, requiresConfirm = false),
+        OpDescriptor("config.import", OpKind.action, remoteAllowed = false, requiresConfirm = true),
     )
     private val byName = ops.associateBy { it.name }
     fun find(name: String): OpDescriptor? = byName[name]
@@ -34,6 +37,7 @@ object OpRegistry {
         ops.filter { it.name.startsWith("spoof.call") }.forEach {
             check(it.kind == OpKind.action && !it.remoteAllowed && it.requiresConfirm) { "call op ${it.name} must be local-only" }
         }
+        ops.filter { it.name.startsWith("config.") }.forEach { check(!it.remoteAllowed) { "config ops must stay local" } }
         ops.filter { it.kind == OpKind.destructive }.forEach { check(!it.remoteAllowed && it.requiresConfirm) }
     }
 }

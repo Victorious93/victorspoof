@@ -3,6 +3,9 @@ package com.victorious.spoof.data
 import android.content.Context
 import com.victorious.spoof.bridge.BridgeSettings
 import com.victorious.spoof.bridge.NodeIds
+import com.victorious.spoof.config.ConfigBackup
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -27,4 +30,20 @@ class AppSettings @Inject constructor(@ApplicationContext ctx: Context) : Bridge
     var accountId: String?
         get() = prefs.getString("account_id", null)
         set(v) { prefs.edit().putString("account_id", v).apply() }
+
+    /** Current non-secret UI prefs (allowlisted keys only). */
+    fun uiPrefs(): Map<String, JsonElement> = ConfigBackup.ALLOWLIST.keys.mapNotNull { k ->
+        prefs.getString("uipref_$k", null)?.let { k to decodePref(it) }
+    }.toMap()
+
+    /** ConfigBackup writer: can only write allowlisted UI prefs and force external control OFF. */
+    val backupWriter = object : ConfigBackup.PrefsWriter {
+        override fun writeUiPref(key: String, value: JsonPrimitive) {
+            require(key in ConfigBackup.ALLOWLIST) { "not an allowlisted pref" }
+            prefs.edit().putString("uipref_$key", value.toString()).apply()
+        }
+        override fun forceExternalControlOff() { externalControlEnabled = false }
+    }
+
+    private fun decodePref(raw: String): JsonElement = kotlinx.serialization.json.Json.parseToJsonElement(raw)
 }

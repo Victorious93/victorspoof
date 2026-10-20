@@ -46,7 +46,9 @@ class BridgeDispatcherTest {
         assertEquals(Triple("action", false, true), f("spoof.call.end"))
         assertEquals(Triple("destructive", false, true), f("spoof.recording.delete"))
         assertEquals(Triple("read", true, false), f("node.status.get"))
-        assertEquals(8, ops.size)
+        assertEquals(Triple("action", false, false), f("config.export"))
+        assertEquals(Triple("action", false, true), f("config.import"))
+        assertEquals(10, ops.size)
     }
 
     @Test fun everyCallOpIsActionRemoteDeniedConfirmRequired() {
@@ -57,7 +59,7 @@ class BridgeDispatcherTest {
 
     /** HARD RULE: no remote op may place a call, via any envelope op, with any forged hint. */
     @Test fun noRemoteOpCanPlaceACall() {
-        val denied = OpRegistry.ops.filter { !it.remoteAllowed }.map { it.name }
+        val denied = OpRegistry.ops.filter { !it.remoteAllowed && !it.name.startsWith("config.") }.map { it.name }
         for (op in denied) {
             for (forge in listOf<JsonObjectBuilder.() -> Unit>({}, { put("destructive", false) }, { put("trigger", buildJsonObject { put("userConfirmed", true); put("remoteAllowed", true) }) })) {
                 assertEquals(op, "unauthorized", category(run(cmd(op, forge))))
@@ -197,5 +199,15 @@ class BridgeDispatcherTest {
     @Test fun nodeStatusNeedsExternalControl() {
         external = false
         assertEquals("external_control_disabled", category(run(env("node.status.get"))))
+    }
+
+    @Test fun configOpsAreRemoteDeniedEvenWithForgedHints() {
+        for (op in listOf("config.export", "config.import")) {
+            assertEquals(op, "capability_off", category(run(cmd(op) { put("destructive", false); put("dryRun", true)
+                put("params", buildJsonObject { put("dryRun", "true"); put("clearPayload", "true") }) })))
+            assertEquals(op, "capability_off", category(run(env("macro.run") { put("macroId", "m"); put("dryRun", true)
+                putJsonArray("steps") { add(buildJsonObject { put("actionRef", op) }) } })))
+        }
+        assertTrue(exec.invoked.isEmpty())
     }
 }

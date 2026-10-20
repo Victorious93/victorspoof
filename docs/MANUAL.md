@@ -78,6 +78,8 @@ VictorSpoof can join the Victorious app fleet as an **EXTERNAL_NODE**.
 | spoof.call.start | action | **no** | yes |
 | spoof.call.end | action | **no** | yes |
 | spoof.recording.delete | destructive | **no** | yes |
+| config.export | action | **no** | no |
+| config.import | action | **no** | yes |
 
 **No fleet app can ever place, end or control a call, or delete recordings.** Those happen only from your own taps inside VictorSpoof. VictorSpoof decides each op's type itself, so a message that claims to be "not destructive" changes nothing.
 
@@ -85,7 +87,18 @@ Technical details for developers: bound Messenger service, action `com.victoriou
 
 Twilio credentials and the number pool live only on the VictorSpoof backend and in CI secrets. They are never shared with the fleet or stored in the app.
 
-## 11. Troubleshooting
+## 11. Settings backup (config.export / config.import)
+
+VictorSpoof follows the fleet UNIFIED_BACKUP format (droidcommand-AI `docs/specs/UNIFIED_BACKUP.md`).
+
+- **What is exported:** only look-and-feel preferences: theme, voice preset, soundboard volume, haptics, tips and text size.
+- **What is never exported:** Twilio credentials, auth tokens, the number pool, phone numbers, account ids, tokens, pairings, the node id, or any fleet/call setting. Two layers enforce this. First, an allowlist means only the preferences above are ever read. Second, a refusal scan blocks the whole export if any forbidden name (such as `twilio`, `authToken`, `numberPool`, `token`, `account`, `phone`) or anything that looks like a phone number, credential or id shows up.
+- **Export:** go to Settings → **Export settings**. The backup text appears so you can copy it.
+- **Import:** paste a backup, then tap **Preview (dry run)**. This shows exactly what would change and writes nothing. Tap **Import…** and confirm the dialog to apply it. Existing preferences are kept unless the backup asks to overwrite.
+- An import is refused if it contains any forbidden setting. An import can never turn on fleet external control, remote commands, or any calling or auto-dial behavior. Every applied import turns fleet external control **OFF**.
+- Fleet apps can't run export or import remotely (`remoteAllowed:false`). They get `capability_off`. Both work only from your own taps in Settings.
+
+## 12. Troubleshooting
 
 - **"Finish onboarding first" / Call stays locked:** complete the disclaimer, 18+ and AUP steps. AUP acceptance must reach the server.
 - **"denied: daily_limit" or "target_daily_limit":** you hit the daily limits. Try tomorrow (limits reset at midnight UTC).
@@ -94,9 +107,10 @@ Twilio credentials and the number pool live only on the VictorSpoof backend and 
 - **"token unavailable (503)":** the server's voice provider isn't configured yet. Try later.
 - **Contact picker does nothing:** allow the Contacts permission in Android Settings → Apps → VictorSpoof.
 - **No audio:** allow the Microphone permission.
+- **"Import refused (invalid_parameters)":** the backup contains a forbidden or invalid setting, or it came from an unknown format. Export a fresh backup.
 - **Fleet app gets `not_paired`:** pair its exact package and cert in Settings. **`external_control_disabled`:** turn on external control.
 
-## 12. Privacy
+## 13. Privacy
 
 - We store on the server: your account id, your 18+ confirmation, your AUP acceptance (version, time, IP, app version), and per-call rate-limit records (target number and date) needed to enforce the limits.
 - On your phone: your consent status, paired fleet apps, and a VictorSpoof-only prank history with masked numbers. App data is excluded from cloud backups.
@@ -104,6 +118,6 @@ Twilio credentials and the number pool live only on the VictorSpoof backend and 
 - Recordings exist only when you turn recording on, and the announcement plays.
 - Twilio (primary) or Telnyx (backup) carries the calls under their own privacy terms.
 
-## 13. Legal
+## 14. Legal
 
 VictorSpoof follows the U.S. **Truth in Caller ID Act of 2009** (47 U.S.C. § 227(e)): misleading caller ID with intent to defraud, cause harm, or wrongfully obtain anything of value is illegal. VictorSpoof never lets you pick arbitrary caller ID, blocks sensitive numbers and names, and always reveals the prank. You remain responsible for complying with local laws, including call-recording consent laws.

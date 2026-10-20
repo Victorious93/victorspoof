@@ -9,6 +9,11 @@ import com.victorious.spoof.data.AppDatabase
 import com.victorious.spoof.data.AppSettings
 import com.victorious.spoof.data.ConsentRecord
 import com.victorious.spoof.data.PairedNode
+import com.victorious.spoof.config.ConfigBackup
+import com.victorious.spoof.bridge.BridgeException
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -58,4 +63,30 @@ class AppViewModel @Inject constructor(
         db.pairing().upsert(PairedNode(pkg.trim(), cert.replace(":", "").trim().lowercase(), pkg.trim(), System.currentTimeMillis()))
     }
     fun unpair(n: PairedNode) = viewModelScope.launch { db.pairing().delete(n) }
+
+    val backupText = MutableStateFlow<String?>(null)
+
+    /** Local export (Settings button). Dev bundle with wrapping=none until Keystore wrapping lands. */
+    fun exportConfig() {
+        backupText.value = try {
+            val entry = ConfigBackup.exportEntry(settings.uiPrefs(), "local", key = null, clearPayload = true)
+            buildJsonObject {
+                put("version", ConfigBackup.BUNDLE_VERSION); put("createdAtMs", System.currentTimeMillis())
+                put("sourceNodeRef", "local"); put("wrapping", "none"); putJsonArray("entries") { add(entry) }
+            }.toString()
+        } catch (e: BridgeException) { "Export refused: ${e.message}" }
+    }
+
+    /** Dry run: returns the diff text; writes nothing. */
+    fun previewImport(bundle: String): String = try {
+        ConfigBackup.import(ConfigBackup.payloadFromBundle(bundle, null), settings.uiPrefs(), dryRun = true, confirmation = null, writer = settings.backupWriter).toString()
+    } catch (e: BridgeException) { "Import refused (${e.error.wire}): ${e.message}" }
+
+    /** Called ONLY from the on-device confirmation dialog. */
+    fun applyImportConfirmed(bundle: String): String = try {
+        val r = ConfigBackup.import(ConfigBackup.payloadFromBundle(bundle, null), settings.uiPrefs(), dryRun = false,
+            confirmation = ConfigBackup.confirmLocally(), writer = settings.backupWriter)
+        externalControl.value = settings.externalControlEnabled
+        r.toString()
+    } catch (e: BridgeException) { "Import refused (${e.error.wire}): ${e.message}" }
 }

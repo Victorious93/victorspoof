@@ -79,6 +79,8 @@ class BridgeDispatcher(
     private fun gate(actionRef: String): OpDescriptor {
         val d = OpRegistry.find(actionRef) ?: throw BridgeException(BridgeError.NOT_FOUND, "unknown actionRef $actionRef")
         // remoteAllowed=false is a hard deny (e.g. every spoof.call* op). It can only run from in-app UI.
+        // UNIFIED_BACKUP §6: remoteAllowed=false config ops answer capability_off to remote callers.
+        if (!d.remoteAllowed && d.name.startsWith("config.")) throw BridgeException(BridgeError.CAPABILITY_OFF, "${d.name} is local-only (remoteAllowed=false)")
         if (!d.remoteAllowed) throw BridgeException(BridgeError.UNAUTHORIZED, "${d.name} is not remote-allowed; local in-app use only")
         // Remote-allowed but confirm-required ops would need an on-device prompt; none are approved yet.
         if (d.requiresConfirm) throw BridgeException(BridgeError.CONFIRMATION_REQUIRED, "${d.name} requires on-device confirmation")
