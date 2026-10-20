@@ -39,3 +39,28 @@ CREATE TABLE IF NOT EXISTS blocked_numbers (
     e164      TEXT PRIMARY KEY,
     category  TEXT NOT NULL        -- government | police | hospital | bank | emergency
 );
+
+-- ---------------------------------------------------------------- auth (feat/features)
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS password_hash TEXT;   -- bcrypt, cost 12
+CREATE UNIQUE INDEX IF NOT EXISTS accounts_email ON accounts(lower(email));
+
+CREATE TABLE IF NOT EXISTS refresh_tokens (
+    token_hash   TEXT PRIMARY KEY,     -- SHA-256 of the opaque refresh token; the token itself is never stored
+    account_id   UUID NOT NULL REFERENCES accounts(id),
+    expires_at   TIMESTAMPTZ NOT NULL,
+    revoked      BOOLEAN NOT NULL DEFAULT false
+);
+
+-- One-time call tickets minted by /v1/calls/authorize and consumed by the TwiML voice webhook.
+CREATE TABLE IF NOT EXISTS call_tickets (
+    id             TEXT PRIMARY KEY,
+    account_id     UUID NOT NULL REFERENCES accounts(id),
+    target_e164    TEXT NOT NULL,
+    caller_id      TEXT NOT NULL,
+    display_name   TEXT,
+    max_seconds    INT NOT NULL,
+    recording      BOOLEAN NOT NULL,
+    expires_at     TIMESTAMPTZ NOT NULL,
+    used           BOOLEAN NOT NULL DEFAULT false
+);

@@ -1,6 +1,8 @@
 package com.victorious.spoof.backend
 
 import com.victorious.spoof.backend.guardrails.*
+import com.victorious.spoof.backend.twilio.TwilioConfig
+import com.victorious.spoof.backend.twilio.TwilioTokenIssuer
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -98,5 +100,25 @@ class TwilioConfigTest {
         assertNull(TwilioConfig.fromEnv { if (it == "TWILIO_ACCOUNT_SID") "AC" else null })
         assertFalse(TwilioTokenIssuer(null).configured)
         assertNull(TwilioTokenIssuer(null).issue("x"))
+    }
+}
+
+class TwilioEnvNamesTest {
+    @Test fun canonicalNamesAccepted() {
+        val env = mapOf("TWILIO_ACCOUNT_SID" to "ACx", "TWILIO_API_KEY" to "SKx", "TWILIO_API_SECRET" to "s", "TWILIO_TWIML_APP_SID" to "APx")
+        assertNotNull(TwilioConfig.fromEnv { env[it] })
+        assertEquals(emptyList(), TwilioConfig.missing { env[it] })
+        assertEquals(listOf("TWILIO_API_SECRET"), TwilioConfig.missing { (env - "TWILIO_API_SECRET")[it] })
+        assertFalse(TwilioConfig.fromEnv { env[it] }.toString().contains("\"s\""))
+    }
+    @Test fun issuedTokenIsShortLivedVoiceJwt() {
+        val cfg = TwilioConfig("AC" + "0".repeat(32), "SK" + "0".repeat(32), "test-secret-not-real-0123456789abcdef", "AP" + "0".repeat(32))
+        val jwt = TwilioTokenIssuer(cfg, 600).issue("acct-1")!!
+        val body = String(java.util.Base64.getUrlDecoder().decode(jwt.split('.')[1]))
+        assertTrue(body.contains("\"identity\":\"acct-1\""), body)
+        assertTrue(body.contains("outgoing"), body)
+        val exp = Regex("\"exp\":(\\d+)").find(body)!!.groupValues[1].toLong()
+        val nbfOrNow = System.currentTimeMillis() / 1000
+        assertTrue(exp - nbfOrNow in 1..600, "ttl ${exp - nbfOrNow}")
     }
 }

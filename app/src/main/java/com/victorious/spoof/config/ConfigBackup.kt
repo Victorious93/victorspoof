@@ -25,7 +25,7 @@ object ConfigBackup {
     /** Non-secret UI prefs only, each with a value validator. */
     val ALLOWLIST: Map<String, (JsonPrimitive) -> Boolean> = mapOf(
         "ui.theme" to { p -> p.isString && p.content in setOf("dark", "system") },
-        "ui.voicePreset" to { p -> p.isString && p.content in setOf("Normal", "Chipmunk", "Deep", "Robot", "Echo") },
+        "ui.voicePreset" to { p -> p.isString && p.content in com.victorious.spoof.audio.VoicePreset.ids },
         "ui.soundboardVolume" to { p -> p.intOrNull?.let { it in 0..100 } == true },
         "ui.hapticsEnabled" to { p -> p.booleanOrNull != null },
         "ui.showTips" to { p -> p.booleanOrNull != null },

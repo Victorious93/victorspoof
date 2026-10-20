@@ -14,6 +14,7 @@ import javax.inject.Singleton
 @Singleton
 class AppSettings @Inject constructor(@ApplicationContext ctx: Context) : BridgeSettings {
     private val prefs = ctx.getSharedPreferences("victorspoof", Context.MODE_PRIVATE)
+    private val sessionPrefs = ctx.getSharedPreferences("victorspoof_session", Context.MODE_PRIVATE)
 
     val nodeId: String
         get() = prefs.getString("node_id", null)?.takeIf(NodeIds::isValid)
@@ -27,9 +28,8 @@ class AppSettings @Inject constructor(@ApplicationContext ctx: Context) : Bridge
     override fun isCapabilityEnabled(op: String) = prefs.getBoolean("cap_$op", true)
     fun setCapabilityEnabled(op: String, on: Boolean) = prefs.edit().putBoolean("cap_$op", on).apply()
 
-    var accountId: String?
-        get() = prefs.getString("account_id", null)
-        set(v) { prefs.edit().putString("account_id", v).apply() }
+    /** Signed-in account (owned by SessionStore); read-only here, used for the bridge "onboarded" flag. */
+    val accountId: String? get() = sessionPrefs.getString("account_id", null)
 
     /** Current non-secret UI prefs (allowlisted keys only). */
     fun uiPrefs(): Map<String, JsonElement> = ConfigBackup.ALLOWLIST.keys.mapNotNull { k ->

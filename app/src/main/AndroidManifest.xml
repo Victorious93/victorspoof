@@ -11,6 +11,12 @@
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <!-- Contacts picker only. VictorSpoof is never the default dialer and never touches the call log or SMS. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Self-managed VoIP calls only (ConnectionService). Does NOT allow placing carrier calls or reading call state. -->
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <!-- Ongoing-call notification while the mic is live. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-permission android:name="android.permission.CALL_PHONE" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" tools:node="remove" />
@@ -55,5 +61,19 @@
                 <action android:name="com.victorious.spoof.action.BRIDGE" />
             </intent-filter>
         </service>
+
+        <service
+            android:name=".calling.VsConnectionService"
+            android:exported="true"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".calling.CallForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
     </application>
 </manifest>
