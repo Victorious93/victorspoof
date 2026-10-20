@@ -1,8 +1,28 @@
+<!-- victorious-fleet-readme-refresh:start -->
 <p align="center">
-  <img src="assets/logo.png" alt="victorspoof logo" width="200">
+  <img src="assets/logo.png" alt="VictorSpoof logo" width="200">
 </p>
 
 # VictorSpoof
+
+Legal novelty / prank caller-ID app with strict compliance guardrails.
+
+**Package id:** `com.victorious.spoof`
+
+**Status:** scaffold *(from [fleet-manifest ROADMAP](https://github.com/Victorious93/fleet-manifest/blob/main/ROADMAP.md))*
+
+## Install / build
+
+Kotlin Gradle (`app/build.gradle.kts`). Typical: `./gradlew :app:assembleDebug`.
+
+_Steps above are taken from this repo’s build files / existing docs; anything not exercised in this refresh is unlabeled as verified on a device._
+
+## Victorious fleet
+
+- Monorepo: [https://github.com/Victorious93/victorious-fleet](https://github.com/Victorious93/victorious-fleet)
+- Fleet site: [https://victorious-framework.pages.dev](https://victorious-framework.pages.dev)
+
+<!-- victorious-fleet-readme-refresh:end -->
 
 A legal **novelty / prank caller-ID** Android app for harmless pranks between friends. **Entertainment only.**
 Fleet class: `EXTERNAL_NODE`. Package: `com.victorious.spoof`.
