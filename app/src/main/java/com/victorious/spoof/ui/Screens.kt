@@ -1,23 +1,29 @@
 package com.victorious.spoof.ui
 
 import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
+import android.os.Build
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -27,20 +33,49 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.victorious.spoof.R
+import com.victorious.spoof.audio.Clip
+import com.victorious.spoof.audio.VoicePreset
 import com.victorious.spoof.bridge.OpRegistry
 import com.victorious.spoof.calling.CallerIdMode
 import com.victorious.spoof.calling.LocalPrecheck
+import com.victorious.spoof.calling.MAX_CALL_SECONDS
+import kotlinx.coroutines.launch
 
 @Composable
 fun VictorSpoofRoot(startScreen: String?, vm: AppViewModel = hiltViewModel()) {
     val consent by vm.consent.collectAsState()
+    val account by vm.accountId.collectAsState()
+    LaunchedEffect(account) { if (account != null) vm.refreshMe() }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         when {
             consent?.disclaimerAcceptedAt == null -> DisclaimerScreen(onAccept = vm::acceptDisclaimer)
             consent?.ageConfirmedAt == null -> AgeGateScreen(onConfirm = vm::confirmAge)
+            account == null -> AuthScreen(vm)
             consent?.aupLoggedServerSide != true -> AupScreen(vm)
             else -> MainNav(vm, startScreen)
         }
+    }
+}
+
+@Composable
+fun AuthScreen(vm: AppViewModel) {
+    var signup by remember { mutableStateOf(true) }
+    var email by remember { mutableStateOf("") }
+    var pw by remember { mutableStateOf("") }
+    val msg by vm.message.collectAsState()
+    val busy by vm.busy.collectAsState()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Image(painterResource(R.drawable.logo), contentDescription = null, modifier = Modifier.size(72.dp))
+        Text(if (signup) "Create your account" else "Log in", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+        Text("Your account keeps the call limits and your verified number tied to you. We never see your contacts.")
+        OutlinedTextField(email, { email = it }, label = { Text("Email") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(pw, { pw = it }, label = { Text("Password (10+ characters)") }, singleLine = true,
+            visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password), modifier = Modifier.fillMaxWidth())
+        msg?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Button(onClick = { if (signup) vm.signup(email, pw) else vm.login(email, pw) }, enabled = !busy && email.contains('@') && pw.length >= (if (signup) 10 else 1),
+            modifier = Modifier.fillMaxWidth()) { Text(if (busy) "Please wait…" else if (signup) "Sign up (I'm 18+ and accept the disclaimer)" else "Log in") }
+        TextButton(onClick = { signup = !signup; vm.message.value = null }) { Text(if (signup) "I already have an account" else "Create a new account") }
     }
 }
 
@@ -90,14 +125,15 @@ fun AupScreen(vm: AppViewModel) {
 @Composable
 fun MainNav(vm: AppViewModel, startScreen: String?) {
     val nav = rememberNavController()
-    val start = startScreen?.takeIf { it in setOf("home", "help", "soundboard", "voice", "settings") } ?: "home"
+    val start = startScreen?.takeIf { it in setOf("home", "help", "soundboard", "voice", "settings", "verify") } ?: "home"
     NavHost(nav, startDestination = start) {
         composable("home") { HomeScreen(vm, nav) }
-        composable("voice") { VoiceChangerScreen() }
-        composable("soundboard") { SoundboardScreen() }
-        composable("reveal") { RevealScreen { nav.popBackStack("home", false) } }
+        composable("voice") { VoiceChangerScreen(vm) }
+        composable("soundboard") { SoundboardScreen(vm) }
+        composable("verify") { VerifyNumberScreen(vm) }
+        composable("reveal") { RevealScreen { vm.calls.reset(); nav.popBackStack("home", false) } }
         composable("help") { HelpScreen() }
-        composable("settings") { SettingsScreen(vm) }
+        composable("settings") { SettingsScreen(vm, nav) }
     }
 }
 
@@ -109,7 +145,12 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
     var recording by remember { mutableStateOf(false) }
     var showConfirm by remember { mutableStateOf(false) }
     val state by vm.calls.state.collectAsState()
+    val left by vm.calls.remainingSeconds.collectAsState()
+    val me by vm.me.collectAsState()
+    val preset by vm.audio.preset.collectAsState()
+    val ownVerified = me?.callerIdOptions?.contains("OWN_VERIFIED") == true
     LaunchedEffect(state) { if (state == "reveal") nav.navigate("reveal") }
+    LaunchedEffect(ownVerified) { if (!ownVerified) mode = CallerIdMode.POOL }
 
     val pickContact = rememberLauncherForActivityResult(ActivityResultContracts.PickContact()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -119,7 +160,10 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             ?.use { c -> if (c.moveToFirst()) target = c.getString(0) }
     }
     val contactsPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (it) pickContact.launch(null) }
-    val micPerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    val perms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        if (r[Manifest.permission.RECORD_AUDIO] == true) showConfirm = true
+    }
+    val inCall = state in setOf("authorizing", "ringing", "connected", "reconnecting", "revealing")
 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -127,7 +171,8 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
             Spacer(Modifier.width(12.dp)); Text("VictorSpoof", fontSize = 28.sp, fontWeight = FontWeight.Bold)
         }
         Text("Who are you pranking?")
-        OutlinedTextField(target, { target = it }, label = { Text("Friend's number") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(target, { target = it }, label = { Text("Friend's number") }, singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
         OutlinedButton(onClick = {
             if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) pickContact.launch(null)
             else contactsPerm.launch(Manifest.permission.READ_CONTACTS)
@@ -135,17 +180,31 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
 
         Text("Caller ID (chosen by our server)", fontWeight = FontWeight.Bold)
         Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(mode == CallerIdMode.POOL, { mode = CallerIdMode.POOL }); Text("A VictorSpoof fun number") }
-        Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(mode == CallerIdMode.OWN_VERIFIED, { mode = CallerIdMode.OWN_VERIFIED }); Text("My own verified number") }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RadioButton(mode == CallerIdMode.OWN_VERIFIED, { mode = CallerIdMode.OWN_VERIFIED }, enabled = ownVerified)
+            Text(if (ownVerified) "My own verified number (${me?.verifiedNumberMasked})" else "My own number (verify it first)")
+        }
+        if (!ownVerified) TextButton(onClick = { nav.navigate("verify") }) { Text("Verify my own number…") }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(recording, { recording = it }); Spacer(Modifier.width(8.dp)); Text("Record (everyone hears an announcement)")
         }
+        Text("Voice: ${preset.label}", color = MaterialTheme.colorScheme.secondary)
         Button(onClick = {
-            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) micPerm.launch(Manifest.permission.RECORD_AUDIO)
-            else showConfirm = true
-        }, enabled = target.isNotBlank() && !LocalPrecheck.obviouslyBlocked(target), modifier = Modifier.fillMaxWidth()) { Text("Call") }
+            val needed = buildList {
+                if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.RECORD_AUDIO)
+                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (needed.isEmpty()) showConfirm = true else perms.launch(needed.toTypedArray())
+        }, enabled = !inCall && target.isNotBlank() && !LocalPrecheck.obviouslyBlocked(target), modifier = Modifier.fillMaxWidth()) { Text("Call") }
         if (target.isNotBlank() && LocalPrecheck.obviouslyBlocked(target)) Text("That number can't be called with VictorSpoof.", color = MaterialTheme.colorScheme.error)
-        Text("Status: $state")
-        if (state in setOf("ringing", "connected", "authorizing")) OutlinedButton(onClick = { vm.calls.hangUp() }) { Text("Hang up + reveal") }
+        Text("Status: $state" + (left?.let { " • ${it}s left" } ?: ""))
+        if (inCall) {
+            Button(onClick = { vm.hangUp() }, colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)) { Text("Hang up + reveal") }
+            Text("Live sounds", fontWeight = FontWeight.Bold)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf(Clip.AIR_HORN, Clip.RIMSHOT, Clip.SAD_TROMBONE).forEach { c -> OutlinedButton(onClick = { vm.play(c) }) { Text(c.label, fontSize = 12.sp) } }
+            }
+        }
         HorizontalDivider()
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(onClick = { nav.navigate("voice") }) { Text("Voice") }
@@ -158,36 +217,62 @@ fun HomeScreen(vm: AppViewModel, nav: NavHostController) {
     if (showConfirm) AlertDialog(
         onDismissRequest = { showConfirm = false },
         title = { Text("Place this prank call?") },
-        text = { Text("Call $target now? Max 2 minutes. ${if (recording) "Everyone on the call will hear that it is recorded. " else ""}Pranks must be harmless — no threats, no impersonating authorities, no fraud.") },
-        confirmButton = { Button(onClick = { showConfirm = false; vm.startCall(target, mode, recording, VoicePresets.selected) }) { Text("Yes, call") } },
+        text = { Text("Call $target now? Max ${MAX_CALL_SECONDS / 60} minutes. ${if (recording) "Everyone on the call will hear that it is recorded. " else ""}Pranks must be harmless — no threats, no impersonating authorities, no fraud.") },
+        confirmButton = { Button(onClick = { showConfirm = false; vm.startCall(target, mode, recording) }) { Text("Yes, call") } },
         dismissButton = { TextButton(onClick = { showConfirm = false }) { Text("Cancel") } },
     )
 }
 
-object VoicePresets {
-    val all = listOf("Normal", "Chipmunk", "Deep", "Robot", "Echo")
-    var selected by mutableStateOf("Normal")
+@Composable
+fun VerifyNumberScreen(vm: AppViewModel) {
+    var phone by remember { mutableStateOf("") }
+    var code by remember { mutableStateOf("") }
+    val step by vm.verifyStep.collectAsState()
+    val msg by vm.message.collectAsState()
+    val busy by vm.busy.collectAsState()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text("Verify your own number", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("We text a one-time code to prove this number is yours. Only a verified number can be used as your caller ID. You can't verify emergency, government, police, hospital or bank numbers.")
+        OutlinedTextField(phone, { phone = it }, label = { Text("Your mobile number") }, singleLine = true, enabled = step == "enter",
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone), modifier = Modifier.fillMaxWidth())
+        if (step == "enter") Button(onClick = { vm.verifyStart(phone) }, enabled = !busy && phone.count(Char::isDigit) >= 10) { Text("Text me a code") }
+        if (step == "code") {
+            OutlinedTextField(code, { code = it.filter(Char::isDigit).take(10) }, label = { Text("6-digit code") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword), modifier = Modifier.fillMaxWidth())
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { vm.verifyCheck(phone, code) }, enabled = !busy && code.length >= 4) { Text("Verify") }
+                TextButton(onClick = { vm.verifyStep.value = "enter" }) { Text("Change number") }
+            }
+        }
+        msg?.let { Text(it, color = if (step == "done") MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error) }
+        Text("Limits: 3 codes per hour (5 per day), 5 code attempts per hour.", fontSize = 12.sp)
+    }
 }
 
 @Composable
-fun VoiceChangerScreen() {
-    Column(Modifier.padding(20.dp)) {
+fun VoiceChangerScreen(vm: AppViewModel) {
+    val selected by vm.audio.preset.collectAsState()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp)) {
         Text("Voice changer", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("Preview is a stub; the effect is applied to your outgoing audio during the call.")
-        VoicePresets.all.forEach { p ->
-            Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(VoicePresets.selected == p, { VoicePresets.selected = p }); Text(p) }
+        Text("Applied in real time to your outgoing call audio. You can switch presets mid-call. Your choice is saved.")
+        Spacer(Modifier.height(8.dp))
+        VoicePreset.entries.forEach { p ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected == p, { vm.setPreset(p) })
+                Column { Text(p.label, fontWeight = FontWeight.SemiBold); Text(p.blurb, fontSize = 12.sp) }
+            }
         }
     }
 }
 
 @Composable
-fun SoundboardScreen() {
-    val sounds = listOf("Air horn", "Rimshot", "Sad trombone", "Crowd laugh", "Duck")
-    var last by remember { mutableStateOf<String?>(null) }
-    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+fun SoundboardScreen(vm: AppViewModel) {
+    val state by vm.calls.state.collectAsState()
+    val live = state == "connected"
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Soundboard", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        sounds.forEach { s -> Button(onClick = { last = s }, modifier = Modifier.fillMaxWidth()) { Text(s) } }
-        last?.let { Text("Played: $it (stub — audio injection lands with the call engine)") }
+        Text(if (live) "LIVE: sounds play into the call for your friend." else "Sounds play into the call once it's connected. All clips are generated on-device.")
+        Clip.entries.forEach { c -> Button(onClick = { vm.play(c) }, enabled = live, modifier = Modifier.fillMaxWidth()) { Text(c.label) } }
     }
 }
 
@@ -205,27 +290,25 @@ fun RevealScreen(onDone: () -> Unit) {
 fun HelpScreen() {
     val ctx = LocalContext.current
     val manual = remember { runCatching { ctx.assets.open("MANUAL.md").bufferedReader().readText() }.getOrElse { "Manual unavailable." } }
-    LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-        items(manual.lines()) { line ->
-            when {
-                line.startsWith("# ") -> Text(line.removePrefix("# "), fontSize = 26.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 16.dp))
-                line.startsWith("## ") -> Text(line.removePrefix("## "), fontSize = 20.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 14.dp))
-                line.startsWith("### ") -> Text(line.removePrefix("### "), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp))
-                line.startsWith("![") -> Unit
-                else -> Text(line.replace("**", "").replace("`", ""))
-            }
-        }
-    }
+    MarkdownView(manual)
 }
 
 @Composable
-fun SettingsScreen(vm: AppViewModel) {
+fun SettingsScreen(vm: AppViewModel, nav: NavHostController) {
     val ext by vm.externalControl.collectAsState()
     val pairs by vm.pairings.collectAsState()
+    val me by vm.me.collectAsState()
     var pkg by remember { mutableStateOf("") }
     var cert by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Settings", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Text("Account", fontWeight = FontWeight.Bold)
+        Text("Own number: ${me?.verifiedNumberMasked ?: "not verified"}")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = { nav.navigate("verify") }) { Text("Verify number") }
+            OutlinedButton(onClick = { vm.logout() }) { Text("Log out") }
+        }
+        HorizontalDivider()
         Text("Fleet node id: ${vm.settings.nodeId}")
         Row(verticalAlignment = Alignment.CenterVertically) {
             Switch(ext, vm::setExternalControl); Spacer(Modifier.width(8.dp)); Text("Allow fleet external control (read-only ops + open app)")
@@ -245,25 +328,45 @@ fun SettingsScreen(vm: AppViewModel) {
 
 @Composable
 fun BackupSection(vm: AppViewModel) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val exported by vm.backupText.collectAsState()
+    var usePassphrase by remember { mutableStateOf(true) }
+    var pass1 by remember { mutableStateOf("") }
+    var pass2 by remember { mutableStateOf("") }
     var bundle by remember { mutableStateOf("") }
+    var importPass by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<String?>(null) }
     var confirm by remember { mutableStateOf(false) }
-    Text("Settings backup (UI preferences only)", fontWeight = FontWeight.Bold)
-    Text("Exports only look-and-feel preferences. Never credentials, numbers, accounts, pairings or fleet control.")
-    OutlinedButton(onClick = vm::exportConfig) { Text("Export settings") }
-    exported?.let { Text(it) }
-    OutlinedTextField(bundle, { bundle = it }, label = { Text("Paste a backup to import") }, modifier = Modifier.fillMaxWidth())
+    Text("Encrypted settings backup (UI preferences only)", fontWeight = FontWeight.Bold)
+    Text("Exports only look-and-feel preferences and your voice preset, encrypted with AES-256-GCM. Never credentials, numbers, accounts, pairings or fleet control.")
+    Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(usePassphrase, { usePassphrase = true }); Text("Passphrase (restore on any device)") }
+    Row(verticalAlignment = Alignment.CenterVertically) { RadioButton(!usePassphrase, { usePassphrase = false }); Text("This device's Keystore (restore here only)") }
+    if (usePassphrase) {
+        OutlinedTextField(pass1, { pass1 = it }, label = { Text("Passphrase (8+ characters)") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(pass2, { pass2 = it }, label = { Text("Repeat passphrase") }, singleLine = true, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+    }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(onClick = { result = vm.previewImport(bundle) }, enabled = bundle.isNotBlank()) { Text("Preview (dry run)") }
+        OutlinedButton(onClick = { vm.exportEncrypted(if (usePassphrase) pass1.toCharArray() else null); pass1 = ""; pass2 = "" },
+            enabled = !usePassphrase || (pass1.length >= 8 && pass1 == pass2)) { Text("Export encrypted") }
+        exported?.let { e -> TextButton(onClick = {
+            ctx.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("VictorSpoof backup", e))
+        }) { Text("Copy") } }
+    }
+    exported?.let { SelectionContainer { Text(it, fontFamily = FontFamily.Monospace, fontSize = 11.sp) } }
+    OutlinedTextField(bundle, { bundle = it }, label = { Text("Paste an encrypted backup to import") }, modifier = Modifier.fillMaxWidth())
+    OutlinedTextField(importPass, { importPass = it }, label = { Text("Passphrase (leave empty for Keystore backups)") }, singleLine = true,
+        visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth())
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { scope.launch { result = vm.previewImport(bundle, importPass.takeIf { it.isNotEmpty() }?.toCharArray()) } }, enabled = bundle.isNotBlank()) { Text("Preview (dry run)") }
         Button(onClick = { confirm = true }, enabled = bundle.isNotBlank()) { Text("Import…") }
     }
     result?.let { Text(it) }
     if (confirm) AlertDialog(
         onDismissRequest = { confirm = false },
         title = { Text("Import these settings?") },
-        text = { Text("Only UI preferences will change. Fleet external control will be turned OFF.") },
-        confirmButton = { Button(onClick = { confirm = false; result = vm.applyImportConfirmed(bundle) }) { Text("Import") } },
+        text = { Text("Only UI preferences and the voice preset will change. Fleet external control will be turned OFF.") },
+        confirmButton = { Button(onClick = { confirm = false; scope.launch { result = vm.applyImportConfirmed(bundle, importPass.takeIf { it.isNotEmpty() }?.toCharArray()) } }) { Text("Import") } },
         dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
     )
 }

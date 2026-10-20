@@ -20,8 +20,8 @@ android {
         applicationId = "com.victorious.spoof"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         buildConfigField("String", "FLEET_CLASS", "\"EXTERNAL_NODE\"")
         buildConfigField("int", "BRIDGE_PROTOCOL_MAJOR", "1")
         buildConfigField("int", "BRIDGE_PROTOCOL_MINOR", "1")
@@ -111,6 +111,12 @@ dependencies {
 
     // Primary voice provider. Telnyx is the documented backup (see docs/MANUAL.md).
     implementation("com.twilio:voice-android:6.10.5")
+
+    // Voice preset + UI prefs persistence.
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+    // Help screen: CommonMark + GFM tables, rendered to Compose.
+    implementation("org.commonmark:commonmark:0.22.0")
+    implementation("org.commonmark:commonmark-ext-gfm-tables:0.22.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")

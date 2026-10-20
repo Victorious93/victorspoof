@@ -10,6 +10,8 @@ data class CallAuthorization(
     val target: String? = null,
     val maxCallSeconds: Int? = null,
     val recordingAnnouncementRequired: Boolean = false,
+    /** One-time ticket the app passes to the Voice SDK; the TwiML webhook consumes it. */
+    val ticket: String? = null,
 )
 
 data class AccountState(val id: String, val ageAttested: Boolean, val aupAccepted: Boolean, val verifiedNumber: String?, val suspended: Boolean = false)
