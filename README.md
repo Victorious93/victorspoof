@@ -1,4 +1,6 @@
-<p align="center"><img src="docs/logo.png" alt="VictorSpoof logo" width="220"></p>
+<p align="center">
+  <img src="assets/logo.png" alt="victorspoof logo" width="200">
+</p>
 
 # VictorSpoof
 
