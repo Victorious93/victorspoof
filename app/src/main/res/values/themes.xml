@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.VictorSpoof" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#FF14161B</item>
+        <item name="android:navigationBarColor">#FF14161B</item>
+        <item name="android:windowBackground">@color/ic_launcher_background</item>
+    </style>
+</resources>

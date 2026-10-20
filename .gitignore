@@ -1,0 +1,14 @@
+.gradle/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+*.apk
+*.aab
+# Never commit release keys. Only the dedicated debug keystore is allowed.
+*.jks
+*.keystore
+!keystore/victorspoof-debug.jks
+.env
