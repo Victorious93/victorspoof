@@ -26,6 +26,11 @@
     <uses-permission android:name="android.permission.READ_SMS" tools:node="remove" />
     <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" tools:node="remove" />
 
+    <!-- Fleet theme (read-only): lets us resolve VictorLaunch's provider and verify its signing cert on API 30+. -->
+    <queries>
+        <package android:name="com.victorious.launch" />
+    </queries>
+
     <application
         android:name=".VictorSpoofApp"
         android:allowBackup="false"
@@ -75,5 +80,16 @@
             android:name=".calling.CallForegroundService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- FLEET_THEME wake-up. Exported because VictorLaunch sends explicitly to this package.
+             Payload is ignored; the receiver only re-queries the cert-pinned provider. -->
+        <receiver
+            android:name=".theme.FleetThemeChangedReceiver"
+            android:exported="true"
+            tools:ignore="ExportedReceiver">
+            <intent-filter>
+                <action android:name="com.victorious.launch.action.FLEET_THEME_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
