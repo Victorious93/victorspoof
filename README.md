@@ -1,33 +1,38 @@
-<!-- victorious-fleet-readme-refresh:start -->
-<p align="center">
-  <img src="assets/logo.png" alt="VictorSpoof logo" width="200">
-</p>
+<div align="center">
+
+<img src="assets/logo.png" width="200" alt="VictorSpoof logo"/>
 
 # VictorSpoof
 
-Legal novelty / prank caller-ID app with strict compliance guardrails.
+**A legal novelty caller-ID app with strict compliance guardrails.**
 
-**Package id:** `com.victorious.spoof`
+<p>
+  <a href="https://github.com/Victorious93/victorspoof/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Victorious93/victorspoof/ci.yml?branch=main&style=flat-square&labelColor=0B0F1A&logo=githubactions&logoColor=00E5FF&label=CI" alt="CI"/></a>
+  <a href="https://github.com/Victorious93/victorspoof/releases"><img src="https://img.shields.io/github/v/release/Victorious93/victorspoof?include_prereleases&style=flat-square&labelColor=0B0F1A&color=00E5FF&label=release" alt="Release"/></a>
+  <img src="https://img.shields.io/badge/platform-Android-00E5FF?style=flat-square&labelColor=0B0F1A" alt="Platform"/>
+  <a href="https://victorious-framework.pages.dev"><img src="https://img.shields.io/badge/Victorious-Framework-FF2BD6?style=flat-square&labelColor=0B0F1A" alt="Victorious Framework"/></a>
+</p>
 
-**Status:** scaffold *(from [fleet-manifest ROADMAP](https://github.com/Victorious93/fleet-manifest/blob/main/ROADMAP.md))*
+<p><a href="https://github.com/Victorious93/victorspoof/releases">Releases</a> · <a href="https://victorious-framework.pages.dev">Victorious Framework</a></p>
 
-## Install / build
+</div>
 
-Kotlin Gradle (`app/build.gradle.kts`). Typical: `./gradlew :app:assembleDebug`.
+---
 
-_Steps above are taken from this repo’s build files / existing docs; anything not exercised in this refresh is unlabeled as verified on a device._
+A legal **novelty / prank caller-ID** Android app for harmless pranks between friends, with strict compliance guardrails. **Entertainment only.** Fleet class: `EXTERNAL_NODE`. Package id: `com.victorious.spoof`, version 0.2.0.
 
-## Victorious fleet
+> **Status: early development (v0.2).** CI builds and tests the app and backend. Real calling needs your own Twilio account and a deployed backend; nothing here is claimed as tested against live carriers or on a device.
 
-- Monorepo: [https://github.com/Victorious93/victorious-fleet](https://github.com/Victorious93/victorious-fleet)
-- Fleet site: [https://victorious-framework.pages.dev](https://victorious-framework.pages.dev)
+## Install
 
-<!-- victorious-fleet-readme-refresh:end -->
+Download the APK from [Releases](https://github.com/Victorious93/victorspoof/releases) (latest: `v0.1.1-debug`, a debug pre-release older than the 0.2.0 source). CI also uploads each build as the `victorspoof-debug-apk` artifact. minSdk 26. Calling requires the backend (`backend/`) with the secrets listed below.
 
-A legal **novelty / prank caller-ID** Android app for harmless pranks between friends. **Entertainment only.**
-Fleet class: `EXTERNAL_NODE`. Package: `com.victorious.spoof`.
+## Permissions
+
+`RECORD_AUDIO`, `MODIFY_AUDIO_SETTINGS`, `READ_CONTACTS`, `MANAGE_OWN_CALLS`, `CALL_PHONE`, `READ_CALL_LOG`, `WRITE_CALL_LOG`, `PROCESS_OUTGOING_CALLS`, `SEND_SMS`, `READ_SMS`, `READ_PHONE_NUMBERS`, `POST_NOTIFICATIONS`, `FOREGROUND_SERVICE` (microphone), `INTERNET` and `ACCESS_NETWORK_STATE`. No root required.
 
 - Full how-to manual: [docs/MANUAL.md](docs/MANUAL.md) (also in-app under **Help**)
+
 
 ## Legal scope
 
@@ -116,3 +121,19 @@ Bound Messenger service `com.victorious.spoof.action.BRIDGE` (protocol 1.1, froz
 | config.import | action | false | true |
 
 The receiver classifies every op itself, so envelope hints (`destructive`, `trigger.*`) never change these flags. `config.export` exports only allowlisted UI prefs and runs a refusal scan for Twilio credentials, `authToken`, `numberPool`, phone numbers, account ids and tokens. `config.import` supports `dryRun` (diff only, no writes), needs on-device confirmation, and always forces external control OFF.
+
+---
+
+## Victorious fleet
+
+VictorSpoof is part of the [Victorious Framework](https://victorious-framework.pages.dev), a family of Android and PC tools by Don Victor. **Every app works standalone; fleet integrations are optional** and never required.
+
+Related: [victorsms](https://github.com/Victorious93/victorsms) (SMS app), [droidcommand-AI](https://github.com/Victorious93/droidcommand-AI) (fleet controller), [victorious-fleet](https://github.com/Victorious93/victorious-fleet) (index of all fleet apps). The full roster lives in [victorious-fleet](https://github.com/Victorious93/victorious-fleet), and live status is in [fleet-manifest](https://github.com/Victorious93/fleet-manifest).
+
+## Contributing
+
+Issues and pull requests are welcome. Keep changes focused, match the existing code style, never commit secrets or release keys, and keep any fleet integration optional so the app still works on its own. Open a PR against the default branch and wait for CI to pass.
+
+## License
+
+This repository does not include a LICENSE file yet, so no license is granted beyond what the author states elsewhere. Please open an issue before reusing the code.
